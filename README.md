@@ -1,5 +1,4 @@
 # 📚 To Read List
-<img src="print.png" alt="Descrição" width="500">
 
 Um aplicativo web minimalista para registrar o hábito de leitura diário e manter uma lista de desejos de livros para o futuro. Construído com Python e Streamlit.
 
@@ -7,7 +6,15 @@ Um aplicativo web minimalista para registrar o hábito de leitura diário e mant
 
 O sistema é dividido em duas abas principais:
 - **Diário:** Permite registrar a data, o nome do material e quantas páginas foram lidas no dia.
-- **Wishlist:** Uma lista simples para adicionar títulos que você deseja ler futuramente.
+
+<img src="diario.png" alt="Descrição" width="500">
+
+- **Wishlist:**  Uma lista simples para adicionar títulos que você deseja ler futuramente.
+
+<img src="registro.png" alt="Descrição" width="500">
+<img src="wishlist.png" alt="Descrição" width="500">
+
+
 - **Armazenamento Local:** Todos os registros são salvos automaticamente em arquivos locais (`diario.csv` e `wishlist.csv`) na raiz do projeto.
 
 ## 🚀 Como executar o projeto localmente
