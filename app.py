@@ -9,51 +9,77 @@ st.title("⛾ To Read List")
 def carregar(ficheiro, colunas):
     return pd.read_csv(ficheiro) if os.path.exists(ficheiro) else pd.DataFrame(columns=colunas)
 
+# Carrega as 3 bases de dados
 df_diario = carregar("diario.csv", ["Data", "Livro", "Páginas"])
 df_wishlist = carregar("wishlist.csv", ["Livro", "Status"])
+df_livros = carregar("livros.csv", ["Livro", "Status"])
 
 if "Status" not in df_wishlist.columns:
     df_wishlist["Status"] = "Pendente"
 
-aba_diario, aba_wishlist = st.tabs([":material/menu_book: Diário", ":material/shopping_cart_checkout: Wishlist"])
+# Segurança: Se a base de livros estiver vazia (primeira vez rodando essa versão), 
+# ele cria a lista automaticamente puxando do histórico do diário
+if df_livros.empty and not df_diario.empty:
+    livros_unicos = df_diario["Livro"].unique()
+    df_livros = pd.DataFrame({"Livro": livros_unicos, "Status": ["Em Progresso"] * len(livros_unicos)})
+    df_livros.to_csv("livros.csv", index=False)
+
+# Criação das 3 abas
+aba_diario, aba_livros, aba_wishlist = st.tabs([
+    ":material/menu_book: Diário", 
+    ":material/auto_stories: Meus Livros", 
+    ":material/shopping_cart_checkout: Wishlist"
+])
 
 # --- ABA 1: DIÁRIO ---
 with aba_diario:
-    # Navegação de Data e Contador no topo
     col_data, col_contador = st.columns([1, 3], vertical_alignment="center")
     with col_data:
         data_selecionada = st.date_input("Navegar para a data:", value=date.today())
         data_str = data_selecionada.strftime("%d/%m/%Y")
     
-    # Filtrar os dados apenas para a data selecionada
     df_do_dia = df_diario[df_diario["Data"] == data_str]
     total_paginas = df_do_dia["Páginas"].sum() if not df_do_dia.empty else 0
     
     with col_contador:
-        st.markdown(f"###  :material/calendar_check: {total_paginas} páginas")
+        st.markdown(f"### :material/today: {total_paginas} páginas")
 
-    # Formulário de entrada
     with st.form("form_leitura", clear_on_submit=True, border=False):
-        # A data já foi escolhida no calendário acima, pedimos apenas o livro e as páginas
-        col1, col2, col3 = st.columns([5, 2, 2], vertical_alignment="bottom")
+        # Layout ajustado para ter caixa de seleção E caixa de texto novo
+        col1, col2, col3, col4 = st.columns([3, 3, 2, 2], vertical_alignment="bottom")
+        
+        # Filtra apenas os livros que ainda não foram marcados como lidos
+        livros_ativos = df_livros[df_livros["Status"] == "Em Progresso"]["Livro"].tolist()
+        opcoes = [""] + livros_ativos if livros_ativos else [""]
         
         with col1:
-            livro = st.text_input("Livro")
+            livro_selecionado = st.selectbox("Livros em Progresso", opcoes)
         with col2:
-            paginas = st.number_input("Páginas lidas", min_value=1, step=1)
+            livro_novo = st.text_input("Ou registre um novo livro")
         with col3:
+            paginas = st.number_input("Páginas lidas", min_value=1, step=1)
+        with col4:
             salvar = st.form_submit_button("Salvar")
         
-        if salvar and livro:
-            novo = pd.DataFrame([{"Data": data_str, "Livro": livro, "Páginas": paginas}])
-            df_diario = pd.concat([df_diario, novo], ignore_index=True)
-            df_diario.to_csv("diario.csv", index=False)
-            st.rerun()
+        if salvar:
+            # Prioriza o livro novo. Se estiver vazio, usa o selecionado na lista
+            livro_final = livro_novo if livro_novo.strip() else livro_selecionado
+            
+            if livro_final:
+                # Se for um livro inédito, adiciona à aba Meus Livros automaticamente
+                if livro_final not in df_livros["Livro"].values:
+                    novo_l = pd.DataFrame([{"Livro": livro_final, "Status": "Em Progresso"}])
+                    df_livros = pd.concat([df_livros, novo_l], ignore_index=True)
+                    df_livros.to_csv("livros.csv", index=False)
+                
+                # Salva o registro no diário
+                novo_d = pd.DataFrame([{"Data": data_str, "Livro": livro_final, "Páginas": paginas}])
+                df_diario = pd.concat([df_diario, novo_d], ignore_index=True)
+                df_diario.to_csv("diario.csv", index=False)
+                st.rerun()
 
-    # Lista de leituras do dia selecionado
     if not df_do_dia.empty:
         st.write("---") 
-        
         hc2, hc3, hc4 = st.columns([5, 2, 2], vertical_alignment="bottom")
         hc2.write("**Livro**")
         hc3.write("**Páginas**")
@@ -63,17 +89,60 @@ with aba_diario:
             c2, c3, c4 = st.columns([5, 2, 2], vertical_alignment="center")
             c2.write(row["Livro"])
             c3.write(row["Páginas"])
-            
             if c4.button(":material/delete:", key=f"del_diario_{i}"):
                 df_diario = df_diario.drop(i)
                 df_diario.to_csv("diario.csv", index=False)
                 st.rerun()
 
-# --- ABA 2: WISHLIST ---
+# --- ABA 2: MEUS LIVROS (PROGRESSO) ---
+with aba_livros:
+    # Contadores globais
+    total_paginas_geral = df_diario["Páginas"].sum() if not df_diario.empty else 0
+    total_livros_lidos = len(df_livros[df_livros["Status"] == "Lido"]) if not df_livros.empty else 0
+    
+    m1, m2 = st.columns(2)
+    m1.metric(":material/check_circle: Livros Lidos", total_livros_lidos)
+    m2.metric(":material/menu_book: Páginas Totais Lidas", total_paginas_geral)
+    
+    if not df_livros.empty:
+        st.write("---") 
+        hl1, hl2, hl3, hl4 = st.columns([5, 2, 1, 1], vertical_alignment="bottom")
+        hl1.write("**Livro**")
+        hl2.write("**Progresso**")
+        hl3.write("**Lido**")
+        hl4.write("**Excluir**")
+        
+        for i, row in df_livros.iterrows():
+            l1, l2, l3, l4 = st.columns([5, 2, 1, 1], vertical_alignment="center")
+            
+            # Soma todas as páginas registradas para este livro específico no Diário
+            pags_livro = df_diario[df_diario["Livro"] == row["Livro"]]["Páginas"].sum()
+            
+            if row["Status"] == "Lido":
+                l1.write(f"~~{row['Livro']}~~")
+            else:
+                l1.write(row["Livro"])
+                
+            l2.write(f"{pags_livro} págs")
+            
+            # Botão de marcar como lido
+            icone_lido = ":material/check_box:" if row["Status"] == "Lido" else ":material/check_box_outline_blank:"
+            if l3.button(icone_lido, key=f"check_livro_{i}"):
+                df_livros.at[i, "Status"] = "Em Progresso" if row["Status"] == "Lido" else "Lido"
+                df_livros.to_csv("livros.csv", index=False)
+                st.rerun()
+            
+            if l4.button(":material/delete:", key=f"del_livro_{i}"):
+                df_livros = df_livros.drop(i)
+                df_livros.to_csv("livros.csv", index=False)
+                st.rerun()
+    else:
+        st.info("Nenhum livro registrado ainda. Ao salvar uma leitura no Diário, o livro aparecerá aqui!")
+
+# --- ABA 3: WISHLIST ---
 with aba_wishlist:
     with st.form("form_wishlist", clear_on_submit=True, border=False):
         colA, colB = st.columns([8, 2], vertical_alignment="bottom")
-        
         with colA:
             novo_desejo = st.text_input("Novo livro")
         with colB:
@@ -87,7 +156,6 @@ with aba_wishlist:
 
     if not df_wishlist.empty:
         st.write("---") 
-        
         hw1, hw2, hw3 = st.columns([7, 1, 1], vertical_alignment="bottom")
         hw1.write("**Livro**")
         hw2.write("**Lido**")
